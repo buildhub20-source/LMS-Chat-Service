@@ -62,6 +62,16 @@ export async function getTenantBySlug(slug) {
 }
 
 /**
+ * Fetches all active tenants from LMS-BackEnd.
+ * @returns {Promise<Array<TenantInfo & { chatFileRetentionDays?: number }>>}
+ */
+export async function getAllActiveTenants() {
+  const url = `${env.lmsBackendUrl}/api/v1/internal/tenants`;
+  const result = await fetchTenant(url);
+  return Array.isArray(result) ? result : (result?.data ?? []);
+}
+
+/**
  * Fetches user details in batch from LMS-BackEnd.
  * @param {string} tenantId
  * @param {string[]} userIds

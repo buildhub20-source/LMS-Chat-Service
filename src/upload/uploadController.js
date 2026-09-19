@@ -1,27 +1,13 @@
 import { Router } from 'express';
 import multer from 'multer';
 import path from 'node:path';
-import fs from 'node:fs';
 import { v4 as uuidv4 } from 'uuid';
+import { uploadBuffer } from '../storage/r2StorageService.js';
+import logger from '../common/logger.js';
 
-const uploadsDir = path.resolve(process.cwd(), 'uploads');
-if (!fs.existsSync(uploadsDir)) {
-  fs.mkdirSync(uploadsDir, { recursive: true });
-}
-
-const storage = multer.diskStorage({
-  destination: (_req, _file, cb) => {
-    cb(null, uploadsDir);
-  },
-  filename: (_req, file, cb) => {
-    const ext = path.extname(file.originalname);
-    const uniqueName = `${uuidv4()}${ext}`;
-    cb(null, uniqueName);
-  },
-});
-
+// In-memory storage only — 0 bytes stored on the local server disk
 const upload = multer({
-  storage,
+  storage: multer.memoryStorage(),
   limits: {
     fileSize: 50 * 1024 * 1024, // 50 MB
   },
@@ -29,29 +15,52 @@ const upload = multer({
 
 const router = Router();
 
-router.post('/', upload.array('files', 10), (req, res, next) => {
+router.post('/', upload.array('files', 10), async (req, res, next) => {
   try {
     if (!req.files || req.files.length === 0) {
       return res.status(400).json({ error: 'No files provided' });
     }
 
-    const baseUrl = `${req.protocol}://${req.get('host')}`;
+    const tenantId = req.tenantId || 'global';
+    const userId = req.user?.userId || 'unknown';
 
-    const fileInfos = req.files.map((f) => ({
-      id: uuidv4(),
-      name: f.originalname,
-      originalName: f.originalname,
-      filename: f.filename,
-      url: `${baseUrl}/api/v1/chat/uploads/${f.filename}`,
-      mimeType: f.mimetype,
-      size: f.size,
-    }));
+    const uploadPromises = req.files.map(async (file) => {
+      const fileId = uuidv4();
+      const ext = path.extname(file.originalname).toLowerCase();
+      const baseName = path.basename(file.originalname, ext).replace(/[^a-zA-Z0-9._-]/g, '_');
+      const cleanFileName = `${baseName}${ext}`;
+      const objectKey = `tenants/${tenantId}/chat/${fileId}-${cleanFileName}`;
 
+      const r2Result = await uploadBuffer({
+        buffer: file.buffer,
+        key: objectKey,
+        contentType: file.mimetype || 'application/octet-stream',
+        metadata: {
+          originalName: cleanFileName,
+          tenantId: String(tenantId),
+          uploaderId: String(userId),
+        },
+      });
+
+      return {
+        id: fileId,
+        name: file.originalname,
+        originalName: file.originalname,
+        key: objectKey,
+        url: r2Result.url,
+        mimeType: file.mimetype,
+        size: file.size,
+      };
+    });
+
+    const fileInfos = await Promise.all(uploadPromises);
+
+    logger.info({ tenantId, count: fileInfos.length }, 'Files uploaded to Cloudflare R2');
     res.json({ success: true, data: fileInfos });
   } catch (err) {
+    logger.error({ error: err.message }, 'Failed uploading chat files to Cloudflare R2');
     next(err);
   }
 });
 
-export { uploadsDir };
 export default router;

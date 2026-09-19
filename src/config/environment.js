@@ -35,6 +35,16 @@ export const env = Object.freeze({
   rateLimitRequestsPerMinute: parseInt(process.env.RATE_LIMIT_REQUESTS_PER_MINUTE ?? '100', 10),
   messageMaxLength: parseInt(process.env.MESSAGE_MAX_LENGTH ?? '4000', 10),
 
+  // Cloudflare R2 Storage
+  r2: {
+    accountId: process.env.R2_ACCOUNT_ID,
+    accessKey: process.env.R2_ACCESS_KEY,
+    secretKey: process.env.R2_SECRET_KEY,
+    bucket: process.env.R2_BUCKET ?? 'buildhub-lms',
+    endpoint: process.env.R2_ENDPOINT ?? (process.env.R2_ACCOUNT_ID ? `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com` : undefined),
+    publicUrl: (process.env.R2_PUBLIC_URL ?? 'https://pub-2a36fd02f599435bb41928e391c5ac50.r2.dev').replace(/\/+$/, ''),
+  },
+
   // Logging
   logLevel: process.env.LOG_LEVEL ?? 'info',
 });

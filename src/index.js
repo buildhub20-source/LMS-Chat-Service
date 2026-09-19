@@ -16,6 +16,7 @@ import connectionManager from './websocket/connectionManager.js';
 
 import channelController from './channels/channelController.js';
 import messageController from './messages/messageController.js';
+import { startRetentionCleanupScheduler } from './jobs/retentionCleanupJob.js';
 
 // ─── Express App ───────────────────────────────────────────
 
@@ -62,10 +63,7 @@ app.get('/health', (_req, res) => {
 
 // ─── API Routes ────────────────────────────────────────────
 
-import uploadController, { uploadsDir } from './upload/uploadController.js';
-
-// Static file serving for uploads (public for <img> tags)
-app.use('/api/v1/chat/uploads', express.static(uploadsDir));
+import uploadController from './upload/uploadController.js';
 
 // All chat API routes require authentication + tenant context
 app.use('/api/v1/chat', authMiddleware, tenantMiddleware);
@@ -146,4 +144,5 @@ process.on('SIGINT', () => shutdown('SIGINT'));
 
 server.listen(env.port, () => {
   logger.info({ port: env.port, env: env.nodeEnv }, `LMS Chat Service listening on port ${env.port}`);
+  startRetentionCleanupScheduler();
 });
