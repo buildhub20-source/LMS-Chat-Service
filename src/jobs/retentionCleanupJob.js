@@ -67,8 +67,9 @@ export async function cleanupTenantChatFiles(tenant) {
     const keysToDelete = [];
     const messageIdsToUpdate = [];
 
+    const messageUpdates = [];
+
     for (const row of result.rows) {
-      messageIdsToUpdate.push(row.id);
       let atts = row.attachments;
       if (typeof atts === 'string') {
         try {
@@ -85,6 +86,18 @@ export async function cleanupTenantChatFiles(tenant) {
             keysToDelete.push(key);
           }
         }
+
+        // Preserve file name and size, but mark as expired with url=null
+        const expiredAtts = atts.map((att) => ({
+          id: att.id,
+          name: att.name || att.originalName || att.filename || 'file',
+          size: att.size,
+          mimeType: att.mimeType,
+          expired: true,
+          url: null,
+        }));
+
+        messageUpdates.push({ id: row.id, expiredAtts });
       }
     }
 
@@ -93,13 +106,13 @@ export async function cleanupTenantChatFiles(tenant) {
       await deleteObjects(keysToDelete);
     }
 
-    // 2. Mark attachments as expired in tenant database to release storage
-    if (messageIdsToUpdate.length > 0) {
+    // 2. Mark attachments as expired in tenant database
+    for (const update of messageUpdates) {
       await pool.query(
         `UPDATE lms.chat_messages
-         SET attachments = '[]'::jsonb
-         WHERE id = ANY($1::uuid[])`,
-        [messageIdsToUpdate]
+         SET attachments = $1
+         WHERE id = $2`,
+        [JSON.stringify(update.expiredAtts), update.id]
       );
     }
 
