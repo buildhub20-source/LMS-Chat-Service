@@ -9,8 +9,8 @@
     "start": "node src/index.js",
     "dev": "node --watch src/index.js",
     "migrate": "node src/db/runMigrations.js",
-    "lint": "eslint src/",
-    "test": "node --test src/**/*.test.js"
+    "lint": "eslint src/ test/",
+    "test": "node --import ./test/helpers/env.js --test \"test/**/*.test.js\""
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1136.0",
@@ -28,7 +28,9 @@
     "uuid": "^11.1.0"
   },
   "devDependencies": {
-    "eslint": "^9.39.0"
+    "@eslint/js": "^9.39.5",
+    "eslint": "^9.39.0",
+    "globals": "^16.5.0"
   },
   "engines": {
     "node": ">=20.19.0"

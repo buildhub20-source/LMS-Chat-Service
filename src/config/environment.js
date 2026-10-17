@@ -28,7 +28,10 @@ export const env = Object.freeze({
   // CORS
   corsAllowedOrigins: (process.env.CORS_ALLOWED_ORIGINS ?? 'http://localhost:5173')
     .split(',')
-    .map((s) => s.trim()),
+    .map((s) => s.trim())
+    .filter(Boolean),
+  // Allows https://<tenant>.<base domain>, so new institutes need no config change.
+  corsAllowedBaseDomain: (process.env.CORS_ALLOWED_BASE_DOMAIN ?? '').trim().toLowerCase(),
 
   // Rate limiting
   rateLimitMessagesPerMinute: parseInt(process.env.RATE_LIMIT_MESSAGES_PER_MINUTE ?? '30', 10),
@@ -49,15 +52,31 @@ export const env = Object.freeze({
   logLevel: process.env.LOG_LEVEL ?? 'info',
 });
 
+const LOCALHOST_ORIGIN = /^https?:\/\/([a-z0-9-]+\.)?localhost(:\d+)?$/;
+const TENANT_LABEL = '[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?';
+
 /**
- * Validates whether an incoming HTTP Origin or Socket.IO origin is permitted.
- * Allows configured origins, plus any localhost subdomain on any port.
+ * Pure origin check. Localhost is accepted only outside production; the base
+ * domain admits exactly one tenant label over https.
  */
-export function isAllowedOrigin(origin) {
+export function isOriginAllowed(origin, { allowedOrigins = [], baseDomain = '', allowLocalhost = false }) {
   if (!origin) return true;
-  if (env.corsAllowedOrigins.includes(origin)) return true;
-  if (/^https?:\/\/([a-z0-9-]+\.)?localhost(:\d+)?$/.test(origin)) return true;
+  if (allowedOrigins.includes(origin)) return true;
+  if (allowLocalhost && LOCALHOST_ORIGIN.test(origin)) return true;
+  if (baseDomain) {
+    const escaped = baseDomain.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return new RegExp(`^https://${TENANT_LABEL}\\.${escaped}$`).test(origin.toLowerCase());
+  }
   return false;
+}
+
+/** Validates whether an incoming HTTP Origin or Socket.IO origin is permitted. */
+export function isAllowedOrigin(origin) {
+  return isOriginAllowed(origin, {
+    allowedOrigins: env.corsAllowedOrigins,
+    baseDomain: env.corsAllowedBaseDomain,
+    allowLocalhost: env.nodeEnv !== 'production',
+  });
 }
 
 export default env;

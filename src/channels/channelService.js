@@ -3,9 +3,6 @@ import tenantContext from '../tenant/tenantContext.js';
 import { BadRequestError, ForbiddenError, NotFoundError } from '../common/errors.js';
 import logger from '../common/logger.js';
 
-/** Valid channel types for Phase 1 */
-const CHANNEL_TYPES = ['ORG', 'COURSE', 'DIRECT', 'GROUP', 'ANNOUNCEMENT', 'LIVE_SESSION'];
-
 /**
  * Ensures the ORG General channel exists for a tenant. Called on first
  * user connection. Idempotent.
