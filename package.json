@@ -28,7 +28,9 @@
     "uuid": "^11.1.0"
   },
   "devDependencies": {
-    "eslint": "^9.39.0"
+    "@eslint/js": "^9.39.5",
+    "eslint": "^9.39.0",
+    "globals": "^14.0.0"
   },
   "engines": {
     "node": ">=20.19.0"

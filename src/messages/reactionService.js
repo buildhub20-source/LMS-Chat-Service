@@ -3,8 +3,6 @@ import * as messageRepo from './messageRepository.js';
 import * as channelRepo from '../channels/channelRepository.js';
 import { BadRequestError, ForbiddenError, NotFoundError } from '../common/errors.js';
 
-const ALLOWED_REACTIONS = ['👍', '❤️', '😂', '🎉', '🚀', '👀', '🔥', '👏'];
-
 /**
  * Toggles an emoji reaction on a message.
  */
