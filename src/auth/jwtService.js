@@ -3,20 +3,6 @@ import env from '../config/environment.js';
 import { UnauthorizedError } from '../common/errors.js';
 
 /**
- * Claim keys — must match SecurityConstants.java in LMS-BackEnd.
- */
-const CLAIMS = Object.freeze({
-  USER_ID: 'userId',
-  SESSION_ID: 'sessionId',
-  TENANT_ID: 'tenantId',
-  ROLES: 'roles',
-  PERMISSIONS: 'permissions',
-  TOKEN_TYPE: 'tokenType',
-});
-
-const TOKEN_TYPE_ACCESS = 'ACCESS';
-
-/**
  * Verifies an LMS access JWT using the shared HS256 secret.
  *
  * @param {string} token — Raw JWT string

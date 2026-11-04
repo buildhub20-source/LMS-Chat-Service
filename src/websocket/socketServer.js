@@ -1,7 +1,7 @@
 import { Server } from 'socket.io';
 import { socketAuth } from './socketAuth.js';
 import { registerSocketHandlers } from './socketHandlers.js';
-import env, { isAllowedOrigin } from '../config/environment.js';
+import { isAllowedOrigin } from '../config/environment.js';
 import logger from '../common/logger.js';
 
 /**

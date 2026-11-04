@@ -11,6 +11,9 @@ import env from '../config/environment.js';
 /** Per-user rate limiter for messages (Phase 2). */
 const rateLimiters = new Map();
 
+/** Room holding every socket of one user. */
+export const userRoom = (tenantId, userId) => `user:${tenantId}:${userId}`;
+
 /**
  * Registers all Socket.IO event handlers for a connected socket.
  * Each handler runs inside the tenant context for DB access.
@@ -41,15 +44,15 @@ export function registerSocketHandlers(io, socket) {
    * Helper: emits to all sockets of a specific user (multi-device).
    */
   function emitToUser(targetUserId, event, data) {
-    const sockets = connectionManager.getUserSockets(tenantId, targetUserId);
-    for (const sid of sockets) {
-      io.to(sid).emit(event, data);
-    }
+    // A room per user, so with the Redis adapter this reaches the user's
+    // sockets on every chat-service copy, not only this one.
+    io.to(userRoom(tenantId, targetUserId)).emit(event, data);
   }
 
   // ─── Connection Setup ────────────────────────────────────
 
   // Register connection
+  socket.join(userRoom(tenantId, userId));
   const { wasOffline } = connectionManager.add(tenantId, userId, socket.id);
   logger.info({ userId, tenantId, socketId: socket.id }, 'Client connected');
 
@@ -260,10 +263,8 @@ export function registerSocketHandlers(io, socket) {
       const channel = await channelService.createDirectChannel(userId, targetUserId);
       // Join both users to the DM room
       socket.join(`${tenantId}:${channel.id}`);
-      const targetSockets = connectionManager.getUserSockets(tenantId, targetUserId);
-      for (const sid of targetSockets) {
-        io.sockets.sockets.get(sid)?.join(`${tenantId}:${channel.id}`);
-      }
+      // Works across chat-service copies when the Redis adapter is attached.
+      io.in(userRoom(tenantId, targetUserId)).socketsJoin(`${tenantId}:${channel.id}`);
 
       // Look up names for both participants
       const pool = tenantContext.getPool();

@@ -1,4 +1,3 @@
-import logger from '../common/logger.js';
 
 /**
  * Tracks active WebSocket connections per tenant/user.

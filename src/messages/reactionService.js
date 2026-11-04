@@ -12,6 +12,9 @@ export async function toggleReaction(messageId, userId, reaction) {
   if (!reaction || !reaction.trim()) {
     throw new BadRequestError('Reaction is required');
   }
+  if (!ALLOWED_REACTIONS.includes(reaction.trim())) {
+    throw new BadRequestError('Unsupported reaction');
+  }
 
   const message = await messageRepo.findMessageById(messageId);
   if (!message) throw new NotFoundError('Message not found');

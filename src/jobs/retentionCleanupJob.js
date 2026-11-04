@@ -2,7 +2,6 @@ import { getAllActiveTenants } from '../tenant/tenantService.js';
 import { getPool as getTenantPool } from '../tenant/tenantPool.js';
 import { deleteObjects } from '../storage/r2StorageService.js';
 import logger from '../common/logger.js';
-import env from '../config/environment.js';
 
 /**
  * Extracts Cloudflare R2 object key from attachment object or URL.
