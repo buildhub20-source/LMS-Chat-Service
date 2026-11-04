@@ -11,6 +11,7 @@ import { authMiddleware } from './auth/authMiddleware.js';
 import { tenantMiddleware } from './tenant/tenantMiddleware.js';
 import tenantContext from './tenant/tenantContext.js';
 import { createSocketServer } from './websocket/socketServer.js';
+import { attachRedisAdapter } from './websocket/redisAdapter.js';
 import { closeAllPools } from './tenant/tenantPool.js';
 import connectionManager from './websocket/connectionManager.js';
 
@@ -118,6 +119,7 @@ app.use((err, _req, res, _next) => {
 
 const server = http.createServer(app);
 const io = createSocketServer(server);
+let closeRedis = async () => {};
 
 // ─── Graceful Shutdown ─────────────────────────────────────
 
@@ -126,6 +128,7 @@ async function shutdown(signal) {
 
   // Close Socket.IO
   io.close();
+  await closeRedis();
 
   // Close HTTP server
   server.close();
@@ -141,6 +144,14 @@ process.on('SIGTERM', () => shutdown('SIGTERM'));
 process.on('SIGINT', () => shutdown('SIGINT'));
 
 // ─── Start ─────────────────────────────────────────────────
+
+// The adapter must be attached before clients connect, so wait for Redis first.
+try {
+  closeRedis = await attachRedisAdapter(io, env.redisUrl);
+} catch (err) {
+  logger.fatal({ err: err.message }, 'Could not connect to Redis (REDIS_URL)');
+  process.exit(1);
+}
 
 server.listen(env.port, () => {
   logger.info({ port: env.port, env: env.nodeEnv }, `LMS Chat Service listening on port ${env.port}`);

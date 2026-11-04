@@ -50,6 +50,9 @@ export const env = Object.freeze({
 
   // Logging
   logLevel: process.env.LOG_LEVEL ?? 'info',
+
+  // Set when more than one chat-service copy runs, so messages reach users on every copy.
+  redisUrl: process.env.REDIS_URL || undefined,
 });
 
 const LOCALHOST_ORIGIN = /^https?:\/\/([a-z0-9-]+\.)?localhost(:\d+)?$/;
