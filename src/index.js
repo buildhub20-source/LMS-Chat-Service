@@ -11,6 +11,7 @@ import { authMiddleware } from './auth/authMiddleware.js';
 import { tenantMiddleware } from './tenant/tenantMiddleware.js';
 import tenantContext from './tenant/tenantContext.js';
 import { createSocketServer } from './websocket/socketServer.js';
+import { connectRedis, closeRedis } from './websocket/redis.js';
 import { closeAllPools } from './tenant/tenantPool.js';
 import connectionManager from './websocket/connectionManager.js';
 
@@ -117,7 +118,7 @@ app.use((err, _req, res, _next) => {
 // ─── HTTP + WebSocket Server ───────────────────────────────
 
 const server = http.createServer(app);
-const io = createSocketServer(server);
+const io = createSocketServer(server, { adapter: await connectRedis() });
 
 // ─── Graceful Shutdown ─────────────────────────────────────
 
@@ -132,6 +133,8 @@ async function shutdown(signal) {
 
   // Close all tenant DB pools
   await closeAllPools();
+
+  await closeRedis();
 
   logger.info('Shutdown complete');
   process.exit(0);

@@ -38,29 +38,31 @@ export function registerSocketHandlers(io, socket) {
   }
 
   /**
-   * Helper: emits to all sockets of a specific user (multi-device).
+   * Helper: emits to all sockets of a specific user (multi-device). Goes through
+   * the user's room, so it reaches devices connected to any copy of the service.
    */
   function emitToUser(targetUserId, event, data) {
-    const sockets = connectionManager.getUserSockets(tenantId, targetUserId);
-    for (const sid of sockets) {
-      io.to(sid).emit(event, data);
-    }
+    io.to(userRoom(tenantId, targetUserId)).emit(event, data);
   }
 
   // ─── Connection Setup ────────────────────────────────────
 
-  // Register connection
-  const { wasOffline } = connectionManager.add(tenantId, userId, socket.id);
+  // Rooms, not this process's memory, are what other copies can reach through
+  // Redis; socket.data travels with fetchSockets() so they can see who is online.
+  socket.data.userId = userId;
+  socket.data.tenantId = tenantId;
+  socket.join([tenantRoom(tenantId), userRoom(tenantId, userId)]);
+  connectionManager.add(tenantId, userId, socket.id);
   logger.info({ userId, tenantId, socketId: socket.id }, 'Client connected');
 
-  // Broadcast presence if user just transitioned to online
-  if (wasOffline) {
-    io.emit('user_presence', {
-      userId,
-      status: 'ONLINE',
-      tenantId,
-    });
-  }
+  // Announce on every connection: repeating ONLINE is harmless, and checking for
+  // "first device" across copies would race when two devices connect together.
+  // Only this institute hears it.
+  io.to(tenantRoom(tenantId)).emit('user_presence', {
+    userId,
+    status: 'ONLINE',
+    tenantId,
+  });
 
   // Auto-setup: ensure ORG General channel exists and user is a member
   withTenantContext(async () => {
@@ -78,7 +80,7 @@ export function registerSocketHandlers(io, socket) {
       socket.emit('authenticated', {
         userId,
         email,
-        onlineUserIds: presence.onlineUserIds,
+        onlineUserIds: await onlineUserIds(io, tenantId, presence.onlineUserIds),
         lastSeen: presence.lastSeen,
         channels: channels.map((ch) => ({
           id: ch.id,
@@ -260,10 +262,8 @@ export function registerSocketHandlers(io, socket) {
       const channel = await channelService.createDirectChannel(userId, targetUserId);
       // Join both users to the DM room
       socket.join(`${tenantId}:${channel.id}`);
-      const targetSockets = connectionManager.getUserSockets(tenantId, targetUserId);
-      for (const sid of targetSockets) {
-        io.sockets.sockets.get(sid)?.join(`${tenantId}:${channel.id}`);
-      }
+      // Works for the other person's devices on every copy, not just this one.
+      io.in(userRoom(tenantId, targetUserId)).socketsJoin(`${tenantId}:${channel.id}`);
 
       // Look up names for both participants
       const pool = tenantContext.getPool();
@@ -375,18 +375,57 @@ export function registerSocketHandlers(io, socket) {
 
   // ─── Disconnect ──────────────────────────────────────────
 
-  socket.on('disconnect', (reason) => {
+  socket.on('disconnect', async (reason) => {
     const meta = connectionManager.remove(socket.id);
-    if (meta?.isNowOffline) {
-      io.emit('user_presence', {
-        userId: meta.userId,
+    logger.info({ userId, tenantId, socketId: socket.id, reason }, 'Client disconnected');
+
+    // Offline only when no device is left on any copy. By now this socket has
+    // left its rooms, so it is not counted.
+    const remaining = await countUserSockets(io, tenantId, userId);
+    const isOffline = remaining === null ? Boolean(meta?.isNowOffline) : remaining === 0;
+    if (isOffline) {
+      const lastSeen = meta?.lastSeen ?? new Date().toISOString();
+      connectionManager.setLastSeen(tenantId, userId, lastSeen);
+      io.to(tenantRoom(tenantId)).emit('user_presence', {
+        userId,
         status: 'OFFLINE',
-        lastSeen: meta.lastSeen,
-        tenantId: meta.tenantId,
+        lastSeen,
+        tenantId,
       });
     }
-    logger.info({ userId, tenantId, socketId: socket.id, reason }, 'Client disconnected');
   });
+}
+
+// ─── Rooms and presence across copies ────────────────────────
+
+/** Every socket of an institute: presence broadcasts stay inside it. */
+export const tenantRoom = (tenantId) => `${tenantId}:tenant`;
+
+/** Every device of one user, on any copy of the service. */
+export const userRoom = (tenantId, userId) => `${tenantId}:user:${userId}`;
+
+/**
+ * How many devices a user has connected across all copies, or null if the
+ * copies could not be asked (callers then fall back to this copy's view).
+ */
+export async function countUserSockets(io, tenantId, userId) {
+  try {
+    return (await io.in(userRoom(tenantId, userId)).fetchSockets()).length;
+  } catch (err) {
+    logger.warn({ err: err.message, tenantId }, 'Could not count user sockets across copies');
+    return null;
+  }
+}
+
+/** Users of an institute connected to any copy; `localFallback` if the copies could not be asked. */
+export async function onlineUserIds(io, tenantId, localFallback = []) {
+  try {
+    const sockets = await io.in(tenantRoom(tenantId)).fetchSockets();
+    return [...new Set(sockets.map((s) => s.data.userId).filter(Boolean))];
+  } catch (err) {
+    logger.warn({ err: err.message, tenantId }, 'Could not list online users across copies');
+    return localFallback;
+  }
 }
 
 // ─── Rate Limiting (Phase 2) ─────────────────────────────────
@@ -428,7 +467,7 @@ setInterval(() => {
     }
     if (timestamps.length === 0) rateLimiters.delete(userId);
   }
-}, 60_000);
+}, 60_000).unref(); // housekeeping only: must not keep the process (or a test run) alive
 
 async function notifyMessageRecipient(tenantId, channelId, senderId, senderName, content) {
   try {
