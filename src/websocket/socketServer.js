@@ -8,10 +8,12 @@ import logger from '../common/logger.js';
  * Creates and configures the Socket.IO server.
  *
  * @param {import('http').Server} httpServer
+ * @param {{ adapter?: Function | null }} [options] Redis adapter when several copies run
  * @returns {import('socket.io').Server}
  */
-export function createSocketServer(httpServer) {
+export function createSocketServer(httpServer, { adapter = null } = {}) {
   const io = new Server(httpServer, {
+    ...(adapter ? { adapter } : {}),
     cors: {
       origin: (origin, callback) => {
         if (isAllowedOrigin(origin)) {

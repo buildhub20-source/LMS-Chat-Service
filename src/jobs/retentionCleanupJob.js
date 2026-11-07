@@ -2,6 +2,7 @@ import { getAllActiveTenants } from '../tenant/tenantService.js';
 import { getPool as getTenantPool } from '../tenant/tenantPool.js';
 import { deleteObjects } from '../storage/r2StorageService.js';
 import logger from '../common/logger.js';
+import { runOnOneCopy } from '../websocket/redis.js';
 
 /**
  * Extracts Cloudflare R2 object key from attachment object or URL.
@@ -169,9 +170,13 @@ export async function runRetentionCleanup() {
  * Starts the background timer that runs the retention cleanup job daily.
  */
 export function startRetentionCleanupScheduler() {
+  // Every copy schedules the job; with Redis only one of them runs each round.
+  // The lock is held for 23 h so it has expired before the next daily run.
+  const runOnce = () => runOnOneCopy('retention-cleanup', 23 * 60 * 60 * 1000, runRetentionCleanup);
+
   // Run first check 30 seconds after server boot
   setTimeout(() => {
-    runRetentionCleanup().catch((err) => {
+    runOnce().catch((err) => {
       logger.error({ error: err.message }, 'Error in initial retention cleanup execution');
     });
   }, 30 * 1000);
@@ -179,7 +184,7 @@ export function startRetentionCleanupScheduler() {
   // Then schedule to run every 24 hours
   const TWENTY_FOUR_HOURS = 24 * 60 * 60 * 1000;
   setInterval(() => {
-    runRetentionCleanup().catch((err) => {
+    runOnce().catch((err) => {
       logger.error({ error: err.message }, 'Error in daily scheduled retention cleanup');
     });
   }, TWENTY_FOUR_HOURS);

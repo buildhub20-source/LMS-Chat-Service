@@ -48,6 +48,14 @@ export const env = Object.freeze({
     publicUrl: (process.env.R2_PUBLIC_URL ?? 'https://pub-2a36fd02f599435bb41928e391c5ac50.r2.dev').replace(/\/+$/, ''),
   },
 
+  // Redis: needed only when more than one copy of this service runs, so that a
+  // message sent through one copy reaches users connected to another.
+  redis: {
+    enabled: process.env.REDIS_ENABLED === 'true',
+    url: process.env.REDIS_URL ?? 'redis://localhost:6379',
+    keyPrefix: process.env.REDIS_KEY_PREFIX ?? 'lms-chat:',
+  },
+
   // Logging
   logLevel: process.env.LOG_LEVEL ?? 'info',
 });
