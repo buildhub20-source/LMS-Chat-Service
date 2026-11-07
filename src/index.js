@@ -134,7 +134,7 @@ async function shutdown(signal) {
   // Close all tenant DB pools
   await closeAllPools();
 
-  await closeRedis();
+  await closeRedis(io);
 
   logger.info('Shutdown complete');
   process.exit(0);

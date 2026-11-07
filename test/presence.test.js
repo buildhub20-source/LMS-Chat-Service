@@ -117,8 +117,11 @@ describe('two copies through Redis', { skip: !redisUrl && 'set TEST_REDIS_URL to
       assert.ok(seen.some((e) => e.userId === 'student-3' && e.status === 'OFFLINE'),
         'copy 1 hears the user leave copy 2');
     } finally {
+      // Same order as the service's shutdown: let each adapter finish
+      // unsubscribing before its Redis clients are closed.
       copy1.close();
       copy2.close();
+      await Promise.allSettled([copy1, copy2].map((c) => c.io.of('/').adapter.close()));
       await Promise.allSettled(redisClients.map((c) => c.close()));
     }
   });

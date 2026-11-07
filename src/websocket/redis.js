@@ -100,8 +100,17 @@ export async function runOnOneCopy(name, holdMs, task) {
   return true;
 }
 
-/** Closes the Redis connections, if any. */
-export async function closeRedis() {
+/**
+ * Closes the Redis connections, if any. Pass the Socket.IO server so its adapter
+ * finishes unsubscribing first: closing the clients under it makes those calls
+ * reject ("The client is closed") and the process exit with an error.
+ *
+ * @param {import('socket.io').Server} [io]
+ */
+export async function closeRedis(io) {
+  if (io && pubClient) {
+    await Promise.allSettled([io.of('/').adapter.close()]);
+  }
   const clients = [pubClient, subClient].filter(Boolean);
   pubClient = null;
   subClient = null;
