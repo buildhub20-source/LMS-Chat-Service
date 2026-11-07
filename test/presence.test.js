@@ -81,6 +81,27 @@ describe('presence', () => {
     assert.ok(seen.some((e) => e.userId === 'student-2' && e.status === 'OFFLINE' && e.lastSeen));
     copy.close();
   });
+
+  it('does not ask other copies about presence while shutting down', async () => {
+    // With Redis, those questions would go out after the Redis connection is
+    // closed and crash the shutdown (seen in CI).
+    const copy = await startCopy();
+    await connect(copy.url, 'student-4', 'tenant-a');
+    await connect(copy.url, 'student-5', 'tenant-a');
+    await settle();
+
+    const adapter = copy.io.of('/').adapter;
+    const original = adapter.fetchSockets.bind(adapter);
+    let lookups = 0;
+    adapter.fetchSockets = (opts) => {
+      lookups++;
+      return original(opts);
+    };
+
+    copy.close();
+    await settle();
+    assert.equal(lookups, 0);
+  });
 });
 
 // Two copies sharing a real Redis. Runs when TEST_REDIS_URL is set, e.g.

@@ -379,6 +379,11 @@ export function registerSocketHandlers(io, socket) {
     const meta = connectionManager.remove(socket.id);
     logger.info({ userId, tenantId, socketId: socket.id, reason }, 'Client disconnected');
 
+    // This copy is stopping (deploy, restart). Its users reconnect to another
+    // copy, which announces them; asking the other copies now would race with
+    // Redis being closed and fail the shutdown.
+    if (reason === 'server shutting down') return;
+
     // Offline only when no device is left on any copy. By now this socket has
     // left its rooms, so it is not counted.
     const remaining = await countUserSockets(io, tenantId, userId);
